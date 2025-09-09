@@ -27,7 +27,8 @@ def save_balance(balance):
     pd.DataFrame([{"Balance": balance}]).to_csv(balancefile, index=False)
 
 def calculate_expenses(csv_file):
-    return csv_file["Amount"].sum()
+    if "Transaction" in csv_file.columns and "Amount" in csv_file.columns:
+        return csv_file[csv_file["Transaction"] == "Expenditure"]["Amount"].sum()
 
 def load_loans():
     if os.path.exists(loans_and_debts):
@@ -39,23 +40,34 @@ def save_loans(df):
     df.to_csv(loans_and_debts, index=False)
 
 def add_expense(expenses,date,category,description,amount,balance):
+    if not isinstance(date, str):
+        date_str = date.strftime("%Y-%m-%d")
+    else:
+        date_str = date
     balance -= amount
-    date_str = date.strftime("%Y-%m-%d")
+    
     new_expense = pd.DataFrame([[date_str,"Expenditure",category,description,amount,balance]],
                                        columns=["Date","Transaction","Category","Description","Amount","Bank Balance"])
     expenses = pd.concat([expenses,new_expense], ignore_index=True)
     save_balance(balance)
     save_data(expenses)
-    st.success("Expense added!")
-def add_income(expenses,date,description,amount,balance):
+    return expenses,balance
+def add_income(expenses,category,date,description,amount,balance):
+    if not isinstance(date, str):
+        date_str = date.strftime("%Y-%m-%d")
+    else:
+        date_str = date
     balance += amount
-    date_str = date.strftime("%Y-%m-%d")
-    new_income = pd.DataFrame([[date_str,"Income","",description,amount,balance]],
+    new_income = pd.DataFrame([[date_str,"Income",category,description,amount,balance]],
                                       columns=["Date","Transaction","Category","Description","Amount","Bank Balance"])
     expenses = pd.concat([expenses,new_income], ignore_index=True)
     save_data(expenses)
     save_balance(balance)
-    st.success("Income added!")
+
+def net_expenditure(csv_file):
+    expenditure=csv_file[csv_file["Transaction"] == "Expenditure"]["Amount"].sum()
+    income=csv_file[csv_file["Transaction"]=="Income"]["Amount"].sum()
+    return income-expenditure
 
 
 # --- Load Data ---
@@ -86,11 +98,14 @@ if st.session_state.page == "Home":
     st.title("Dashboard")
     recent = load_data()
     total_expense = calculate_expenses(recent)
-    col1, col2 = st.columns(2)
+    col1, col2,col3 = st.columns(3)
     with col1:
         st.markdown(f"<h4>Current Balance: ₹{balance}</h4>", unsafe_allow_html=True)
     with col2:
         st.markdown(f"<h4>Total Expenditure: ₹{total_expense}</h4>", unsafe_allow_html=True)
+    with col3:
+        st.markdown(f"<h4>Net Savings: ₹{net_expenditure(recent)}</h4>", unsafe_allow_html=True)
+
 
     st.subheader("Recent Transactions")
     st.table(recent.tail(5))
@@ -112,7 +127,7 @@ elif st.session_state.page == "Add Transactions":
     if st.button("Add Expense"):
         if expense_date and expense_category != "Select..." and expense_amount > 0:
             add_expense(expenses,expense_date,expense_category,expense_description,expense_amount,balance)
-            
+            st.success("Expense added!")
         else:
             st.error("⚠ Please fill in Date, Category, and Amount to add an expense.")
 
@@ -124,16 +139,25 @@ elif st.session_state.page == "Add Transactions":
 
     if st.button("Add Income"):
         if income_date and income_amount > 0:
-            add_income(expenses,income_date,income_description,income_amount,balance)
+            add_income(expenses,"",income_date,income_description,income_amount,balance)
+            st.success("Income Added!")
         else:
             st.error("⚠ Please fill in Date and Amount to add income.")
 
 elif st.session_state.page == "View Transactions":
     st.title("View Transactions")
-    st.subheader("Filter")
-
-    col1, col2 = st.columns(2)
+    
     view = load_data()
+    col1, col2,col3 = st.columns(3)
+    total_expense = calculate_expenses(view)
+    col1, col2,col3 = st.columns(3)
+    with col1:
+        st.markdown(f"<h4>Current Balance: ₹{balance}</h4>", unsafe_allow_html=True)
+    with col2:
+        st.markdown(f"<h4>Total Expenditure: ₹{total_expense}</h4>", unsafe_allow_html=True)
+    with col3:
+        st.markdown(f"<h4>Net Savings: ₹{net_expenditure(view)}</h4>", unsafe_allow_html=True)
+    st.subheader("Filter")
     view["Date"] = pd.to_datetime(view["Date"])
 
     if not view.empty and view["Date"].notna().any():
@@ -210,6 +234,14 @@ elif st.session_state.page == "View Transactions":
 elif st.session_state.page == "Loans and Debts":
     st.header("Loans and Debts")
 
+    # --- Initialize loans in session state ---
+    if "loans" not in st.session_state:
+        st.session_state.loans = loans.copy()
+
+    # Ensure "Select" column exists
+    if "Select" not in st.session_state.loans.columns:
+        st.session_state.loans["Select"] = False  
+
     # --- Loans Given ---
     st.subheader("Loans Given")
     loan_date = st.date_input("Date", key="loan_date")
@@ -222,10 +254,12 @@ elif st.session_state.page == "Loans and Debts":
     if st.button("Register Loan", key="loan_register"):
         if loan_date and given_to.strip() != "" and loan_amount > 0:
             loan_date_str = loan_date.strftime("%Y-%m-%d")
-            new_loan = pd.DataFrame([[loan_date_str,"Loan",given_to,loan_description,loan_amount,"Unpaid"]],
-                                    columns=["Date","Transaction","To","Description","Amount","Status"])
-            loans = pd.concat([loans,new_loan], ignore_index=True)
-            save_loans(loans)
+            new_loan = pd.DataFrame(
+                [[loan_date_str, "Loan", given_to, loan_description, loan_amount, "Unpaid", False]],
+                columns=["Date", "Transaction", "To", "Description", "Amount", "Status", "Select"]
+            )
+            st.session_state.loans = pd.concat([st.session_state.loans, new_loan], ignore_index=True)
+            save_loans(st.session_state.loans)
             st.success("Loan registered successfully!")
         else:
             st.error("⚠ Please enter Date, Loan Given To and Amount.")
@@ -242,61 +276,58 @@ elif st.session_state.page == "Loans and Debts":
     if st.button("Register Debt", key="debt_register"):
         if debt_date and indebted_to.strip() != "" and debt_amount > 0:
             debt_date_str = debt_date.strftime("%Y-%m-%d")
-            new_debt = pd.DataFrame([[debt_date_str,"Debt",indebted_to,debt_description,debt_amount,"Unpaid"]],
-                                    columns=["Date","Transaction","To","Description","Amount","Status"])
-            loans = pd.concat([loans,new_debt], ignore_index=True)
-            save_loans(loans)
+            new_debt = pd.DataFrame(
+                [[debt_date_str, "Debt", indebted_to, debt_description, debt_amount, "Unpaid", False]],
+                columns=["Date", "Transaction", "To", "Description", "Amount", "Status", "Select"]
+            )
+            st.session_state.loans = pd.concat([st.session_state.loans, new_debt], ignore_index=True)
+            save_loans(st.session_state.loans)
             st.success("Debt registered successfully!")
         else:
             st.error("⚠ Please enter Date, Indebted To and Amount.")
 
-    
-    if loans.empty!=True:
+    # --- Settle Up Section ---
+    if not st.session_state.loans.empty:
         st.header("Settle Up Loans and Debts")
 
-      # Add a 'Select' column with checkboxes
-        if loans not in st.session_state:
-            st.session_state.loans=loans
-        st.session_state.loans["Select"] = False  
-        
-
+        # Editable DataFrame with checkboxes
         edited_df = st.data_editor(
-    st.session_state.loans,
-    use_container_width=True,
-    num_rows="fixed",
-    column_config={
-        "Select": st.column_config.CheckboxColumn("Select Row")
-    },
-    disabled=["Transaction", "Amount", "Status"]  # prevent editing other columns
-)
+            st.session_state.loans,
+            use_container_width=True,
+            num_rows="fixed",
+            column_config={
+                "Select": st.column_config.CheckboxColumn("Select Row")
+            },
+            disabled=["Transaction", "Amount", "Status"]  # prevent editing other columns
+        )
         selected_rows = edited_df[edited_df["Select"]]
 
-# Button to update status of selected rows
+        # Button to update status of selected rows
         if st.button("Settle Up"):
-
             if not selected_rows.empty:
-                save_loans(st.session_state.loans)
-                
-             
                 for idx, row in st.session_state.loans.loc[selected_rows.index].iterrows():
-                    if row["Status"]=="Settled":
-                        st.warning(f"{row["Transaction"]} already settled")
-                    elif row["Transaction"] == "Debt" and row["Status"]!="Settled":
-                        st.session_state.loans.loc[selected_rows.index, "Status"] = "Settled"
-                        add_expense(expenses,debt_date,"Debt",f"settled debt with {indebted_to}",debt_amount,balance)
-                        save_loans(st.session_state.loans)
-                    elif row["Transaction"] == "Loan" and row["Status"]!="Settled":
-                        st.session_state.loans.loc[selected_rows.index, "Status"] = "Settled"
-                        add_income(expenses,loan_date,f"Loan paid by {given_to}",loan_amount,balance)
-                        save_loans(st.session_state.loans)
+                    if row["Status"] == "Settled":
+                        st.warning(f'{row["Transaction"]} already settled')
+                    elif row["Transaction"] == "Debt" and row["Status"] != "Settled":
+                        st.session_state.loans.at[idx, "Status"] = "Settled"
+                        expenses,balance=add_expense(
+                            expenses, row["Date"], "Debt",
+                            f"settled debt with {row['To']}", row["Amount"], balance
+                        )
 
-                st.dataframe(st.session_state.loans, use_container_width=True)
-                    
-                    
+                        st.success("Expense added!")
+                        
+                    elif row["Transaction"] == "Loan" and row["Status"] != "Settled":
+                        st.session_state.loans.at[idx, "Status"] = "Settled"
+                        add_income(
+                            expenses, "Loan", row["Date"],
+                            f"Loan paid by {row['To']}", row["Amount"], balance
+                        )
+                        st.success("Income Added!")
+                        
+
+                save_loans(st.session_state.loans)
+                st.success("✅ Selected loans/debts settled!")
+
             else:
                 st.warning("No rows selected.")
-
-            
-
-        
-
