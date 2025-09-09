@@ -255,10 +255,13 @@ elif st.session_state.page == "Loans and Debts":
         st.header("Settle Up Loans and Debts")
 
       # Add a 'Select' column with checkboxes
-        loans["Select"] = False  
+        if loans not in st.session_state:
+            st.session_state.loans=loans
+        st.session_state.loans["Select"] = False  
+        
 
         edited_df = st.data_editor(
-    loans,
+    st.session_state.loans,
     use_container_width=True,
     num_rows="fixed",
     column_config={
@@ -272,17 +275,22 @@ elif st.session_state.page == "Loans and Debts":
         if st.button("Settle Up"):
 
             if not selected_rows.empty:
-                loans.loc[selected_rows.index, "Status"] = "Paid"
-                save_loans(loans)
+                save_loans(st.session_state.loans)
+                
              
-                for idx, row in loans.loc[selected_rows.index].iterrows():
-                    if row["Status"]=="Paid":
+                for idx, row in st.session_state.loans.loc[selected_rows.index].iterrows():
+                    if row["Status"]=="Settled":
                         st.warning(f"{row["Transaction"]} already settled")
-                    elif row["Transaction"] == "Debt" and row["Status"]!="Paid":
+                    elif row["Transaction"] == "Debt" and row["Status"]!="Settled":
+                        st.session_state.loans.loc[selected_rows.index, "Status"] = "Settled"
                         add_expense(expenses,debt_date,"Debt",f"settled debt with {indebted_to}",debt_amount,balance)
-
-                    elif row["Transaction"] == "Loan" and row["Status"]!="Paid":
+                        save_loans(st.session_state.loans)
+                    elif row["Transaction"] == "Loan" and row["Status"]!="Settled":
+                        st.session_state.loans.loc[selected_rows.index, "Status"] = "Settled"
                         add_income(expenses,loan_date,f"Loan paid by {given_to}",loan_amount,balance)
+                        save_loans(st.session_state.loans)
+
+                st.dataframe(st.session_state.loans, use_container_width=True)
                     
                     
             else:
