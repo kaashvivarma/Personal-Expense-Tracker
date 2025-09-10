@@ -12,15 +12,19 @@ autopay_file="autopay.csv"
 
 
 # --- Load & Save Functions ---
+
+#Load main expenses csv file
 def load_data():
     if os.path.exists(filepath):
         return pd.read_csv(filepath)
     else:
         return pd.DataFrame(columns=["Date","Transaction","Category","Description","Amount","Bank Balance"])
 
+#save changes to the expenses csv file
 def save_data(df):
     df.to_csv(filepath, index=False)
 
+#Load and Save the current balance
 def load_balance():
     if os.path.exists(balancefile):
         return pd.read_csv(balancefile).iloc[0,0]
@@ -30,10 +34,12 @@ def load_balance():
 def save_balance(balance):
     pd.DataFrame([{"Balance": balance}]).to_csv(balancefile, index=False)
 
+
 def calculate_expenses(csv_file):
     if "Transaction" in csv_file.columns and "Amount" in csv_file.columns:
         return csv_file[csv_file["Transaction"] == "Expenditure"]["Amount"].sum()
 
+#Load and save current loans and debts
 def load_loans():
     if os.path.exists(loans_and_debts):
         return pd.read_csv(loans_and_debts)
@@ -43,7 +49,7 @@ def load_loans():
 def save_loans(df):
     df.to_csv(loans_and_debts, index=False)
 
-
+#function to add expenses
 def add_expense(expenses,date,category,description,amount,balance):
     if not isinstance(date, str):
         date_str = date.strftime("%Y-%m-%d")
@@ -57,6 +63,8 @@ def add_expense(expenses,date,category,description,amount,balance):
     save_balance(balance)
     save_data(expenses)
     return expenses,balance
+
+#function to add income
 def add_income(expenses,category,date,description,amount,balance):
     if not isinstance(date, str):
         date_str = date.strftime("%Y-%m-%d")
@@ -69,11 +77,13 @@ def add_income(expenses,category,date,description,amount,balance):
     save_data(expenses)
     save_balance(balance)
 
+
 def net_expenditure(csv_file):
     expenditure=csv_file[csv_file["Transaction"] == "Expenditure"]["Amount"].sum()
     income=csv_file[csv_file["Transaction"]=="Income"]["Amount"].sum()
     return income-expenditure
 
+#Load and save current working autopay
 def load_autopay():
     if os.path.exists(autopay_file):
         return pd.read_csv(autopay_file)
@@ -104,12 +114,14 @@ if st.sidebar.button("AutoPay"): st.session_state.page = "AutoPay"
 
 # --- Home Page ---
 if st.session_state.page == "Home":
+    #if no balance has been set, user is asked to input balance
     if not os.path.exists(balancefile):
         initial_balance = st.number_input("Enter your bank balance:", value=10000)
         if st.button("Save Balance"):
             save_balance(initial_balance)
             st.rerun()
 
+    
     st.title("Dashboard")
     recent = load_data()
     loans=load_loans()
@@ -251,12 +263,14 @@ elif st.session_state.page == "View Transactions":
     if st.button("Show All Transactions"):
         st.dataframe(view)
         st.markdown(f"Total expenses: {calculate_expenses(view)}")
+    #Show all loans and debts
     st.subheader("All Loans and Debts")
     if st.button("Show All Loans and Debts"):
         st.dataframe(loans)
         if "Transaction" in loans.columns and "Amount" in loans.columns:
             ex= loans[loans["Transaction"] == "Debt"]["Amount"].sum()
         st.markdown(f"Total debt to pay: {ex}")
+    #Show all Autopay
     st.subheader("All Working Autopay")
     if st.button("Show All Working Autopay"):
         st.dataframe(autopay)
@@ -366,6 +380,7 @@ elif st.session_state.page == "Loans and Debts":
             else:
                 st.warning("No rows selected.")
 
+#---AutoPay---
 elif st.session_state.page=="AutoPay":
     st.header("Setup Autopay")
     autopay = load_autopay()
@@ -430,7 +445,7 @@ elif st.session_state.page=="AutoPay":
 
 
 
-
+#---Analytica and Reports---
 elif st.session_state.page=="Analytics and Report":
     st.header("Analytics and Reports")
     view=load_data()
@@ -502,7 +517,7 @@ elif st.session_state.page=="Analytics and Report":
     top_expenses = view[view["Transaction"] == "Expenditure"].nlargest(5, "Amount")
     st.table(top_expenses[["Date","Category","Description","Amount"]])
 
-    
+#Check if autopay needs to be paid today or if the due date has been exceeded  
 today=datetime.date.today()
 for idx, row in autopay.iterrows():
     next_due_date = pd.to_datetime(row["Next Due"]).date()
