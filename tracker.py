@@ -1,11 +1,15 @@
 import streamlit as st
 import pandas as pd
 import os
+import datetime
+import matplotlib.pyplot as plt
 
 st.set_page_config(page_title="Personal Expense Tracker", layout="wide")
 filepath = "expenses.csv"
 balancefile = "balance.csv"
 loans_and_debts = "loans_and_debts.csv"
+autopay_file="autopay.csv"
+
 
 # --- Load & Save Functions ---
 def load_data():
@@ -39,6 +43,7 @@ def load_loans():
 def save_loans(df):
     df.to_csv(loans_and_debts, index=False)
 
+
 def add_expense(expenses,date,category,description,amount,balance):
     if not isinstance(date, str):
         date_str = date.strftime("%Y-%m-%d")
@@ -69,11 +74,21 @@ def net_expenditure(csv_file):
     income=csv_file[csv_file["Transaction"]=="Income"]["Amount"].sum()
     return income-expenditure
 
+def load_autopay():
+    if os.path.exists(autopay_file):
+        return pd.read_csv(autopay_file)
+    else:
+        return pd.DataFrame(columns=["Start Date","Transaction","Category","Description","Amount","Frequency","Next Due"])
+def save_autopay(df):
+    df.to_csv(autopay_file,index=False)
+
 
 # --- Load Data ---
 expenses = load_data()
 balance = load_balance()
 loans = load_loans()
+autopay=load_autopay()
+
 
 # --- Navigation ---
 if "page" not in st.session_state:
@@ -83,9 +98,9 @@ st.sidebar.header("Menu")
 if st.sidebar.button("Home"): st.session_state.page = "Home"
 if st.sidebar.button("Add Transactions"): st.session_state.page = "Add Transactions"
 if st.sidebar.button("View Transactions"): st.session_state.page = "View Transactions"
-if st.sidebar.button("Analytics and Report"): st.session_state.page = "Analytics"
+if st.sidebar.button("Analytics and Report"): st.session_state.page = "Analytics and Report"
 if st.sidebar.button("Loans and Debts"): st.session_state.page = "Loans and Debts"
-if st.sidebar.button("Settings"): st.session_state.page = "Settings"
+if st.sidebar.button("AutoPay"): st.session_state.page = "AutoPay"
 
 # --- Home Page ---
 if st.session_state.page == "Home":
@@ -97,6 +112,8 @@ if st.session_state.page == "Home":
 
     st.title("Dashboard")
     recent = load_data()
+    loans=load_loans()
+    auto=load_autopay()
     total_expense = calculate_expenses(recent)
     col1, col2,col3 = st.columns(3)
     with col1:
@@ -109,6 +126,10 @@ if st.session_state.page == "Home":
 
     st.subheader("Recent Transactions")
     st.table(recent.tail(5))
+    st.subheader("Recent Loans and Debts")
+    st.table(loans.tail(5))
+    st.subheader("Working Autopay")
+    st.table(auto)
 
 # --- Add Transactions ---
 elif st.session_state.page == "Add Transactions":
@@ -148,6 +169,8 @@ elif st.session_state.page == "View Transactions":
     st.title("View Transactions")
     
     view = load_data()
+    loans=load_loans()
+    auto=load_autopay()
     col1, col2,col3 = st.columns(3)
     total_expense = calculate_expenses(view)
     col1, col2,col3 = st.columns(3)
@@ -224,10 +247,21 @@ elif st.session_state.page == "View Transactions":
             st.info("No transactions recorded yet.")
 
     # Show all transactions
-    st.subheader("Show all Transactions")
+    st.subheader("All Transactions")
     if st.button("Show All Transactions"):
         st.dataframe(view)
         st.markdown(f"Total expenses: {calculate_expenses(view)}")
+    st.subheader("All Loans and Debts")
+    if st.button("Show All Loans and Debts"):
+        st.dataframe(loans)
+        if "Transaction" in loans.columns and "Amount" in loans.columns:
+            ex= loans[loans["Transaction"] == "Debt"]["Amount"].sum()
+        st.markdown(f"Total debt to pay: {ex}")
+    st.subheader("All Working Autopay")
+    if st.button("Show All Working Autopay"):
+        st.dataframe(autopay)
+
+
 
 
 # --- Loans and Debts ---
@@ -331,3 +365,162 @@ elif st.session_state.page == "Loans and Debts":
 
             else:
                 st.warning("No rows selected.")
+
+elif st.session_state.page=="AutoPay":
+    st.header("Setup Autopay")
+    autopay = load_autopay()
+    st.dataframe(autopay)
+
+    auto_date = st.date_input("Start Date")
+    auto_category = "AutoPay"
+    auto_description = st.text_input("AutoPay Description", "AutoPay")
+    auto_amount = st.number_input("Amount", min_value=0.0, format="%.2f")
+    auto_freq = st.selectbox("Frequency", ["Daily","Weekly","Monthly","Yearly"])
+
+    if st.button("Add AutoPay"):
+        if auto_description and auto_amount > 0:
+            new_autopay = pd.DataFrame([[
+                auto_date.strftime("%Y-%m-%d"), "Expenditure", auto_category, auto_description,
+                auto_amount, auto_freq, auto_date.strftime("%Y-%m-%d")
+            ]], columns=["Start Date","Transaction","Category","Description","Amount","Frequency","Next Due"])
+            
+            autopay = pd.concat([autopay, new_autopay], ignore_index=True)
+            save_autopay(autopay)
+            st.success("AutoPay Registered!")
+        else:
+            st.error("Please provide a description and amount.")
+    
+    if not autopay.empty:
+    # Add a selection column for deletion
+        autopay["Select"] = False  
+
+        edited = st.data_editor(
+        autopay,
+        use_container_width=True,
+        num_rows="fixed",  # prevent adding new rows
+        column_config={
+            "Select": st.column_config.CheckboxColumn("Select Row"),
+            "Frequency": st.column_config.SelectboxColumn(
+                "Frequency",
+                options=["Daily", "Weekly", "Monthly", "Yearly"],  # allowed values
+            ),
+        },
+        disabled=[col for col in autopay.columns if col not in ["Frequency", "Select"]]
+        )
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            if st.button("Save Changes"):
+                updated = edited.drop(columns=["Select"])
+                save_autopay(updated)
+                st.rerun()
+                st.success("Changes saved to autopay!")
+
+        with col2:
+            if st.button("Delete Selected"):
+                updated = edited[edited["Select"] == False].drop(columns=["Select"])
+                save_autopay(updated)
+                st.rerun()
+                st.success("Selected autopay entries deleted!")
+    else:
+        st.info("No autopay entries found.")
+
+    
+
+
+
+
+elif st.session_state.page=="Analytics and Report":
+    st.header("Analytics and Reports")
+    view=load_data()
+    if view.empty:
+        st.warning("No transactions available for analytics.")
+    else:
+        # --- Total Metrics ---
+        total_income = view[view["Transaction"] == "Income"]["Amount"].sum()
+        total_expense = view[view["Transaction"] == "Expenditure"]["Amount"].sum()
+        net_savings = total_income - total_expense
+
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Total Income", f"₹{total_income:.2f}")
+        col2.metric("Total Expenditure", f"₹{total_expense:.2f}")
+        col3.metric("Net Savings", f"₹{net_savings:.2f}")
+    
+    category_expenses=view[view["Transaction"]=="Expenditure"].groupby("Category")["Amount"].sum()
+    col1,col2=st.columns(2)
+    fig1,ax1=plt.subplots()
+    ax1.pie(category_expenses,labels=category_expenses.index,autopct='%1.1f%%', startangle=90)
+    ax1.axis("equal")
+    ax1.set_title("Category-wise Expenses")
+    with col1:
+        st.pyplot(fig1)
+
+    view["Date"] = pd.to_datetime(view["Date"])
+    monthly_expenses = view[view["Transaction"] == "Expenditure"].groupby(view["Date"].dt.to_period("M"))["Amount"].sum()
+
+    fig2, ax2 = plt.subplots()
+    monthly_expenses.plot(kind="line", marker="o", ax=ax2)
+    ax2.set_title("Monthly Expenses")
+    ax2.set_xlabel("Month")
+    ax2.set_ylabel("Amount (₹)")
+    with col2:
+        st.pyplot(fig2)
+
+    col1,col2=st.columns(2)
+    
+    daily = view.groupby(["Date", "Transaction"])["Amount"].sum().unstack(fill_value=0)
+
+    if "Income" in daily.columns:
+        ax2.plot(daily.index, daily["Income"], label="Income", color="green", marker="o")
+
+    if "Expenditure" in daily.columns:
+        ax2.plot(daily.index, daily["Expenditure"], label="Expenditure", color="red", marker="o")
+
+    ax2.set_title("Income vs Expenditure Over Time")
+    ax2.set_xlabel("Date")
+    ax2.set_ylabel("Amount")
+    ax2.legend()
+    with col1:
+        st.pyplot(fig2)
+
+    view["Month"] = view["Date"].dt.to_period("M")  # extract month
+    monthly_expenses = view[view["Transaction"] == "Expenditure"].groupby("Month")["Amount"].sum()
+
+    fig3, ax3 = plt.subplots()
+    ax3.bar(monthly_expenses.index.astype(str), monthly_expenses.values, color="red")
+    ax3.set_title("Monthly Expenses")
+    ax3.set_xlabel("Month")
+    ax3.set_ylabel("Total Expenses")
+    plt.xticks(rotation=45)
+    with col2:
+        st.pyplot(fig3)
+
+
+    # --- Top 5 Biggest Expenses ---
+    st.subheader("Top 5 Biggest Expenses")
+    top_expenses = view[view["Transaction"] == "Expenditure"].nlargest(5, "Amount")
+    st.table(top_expenses[["Date","Category","Description","Amount"]])
+
+    
+today=datetime.date.today()
+for idx, row in autopay.iterrows():
+    next_due_date = pd.to_datetime(row["Next Due"]).date()
+    if next_due_date<=today:
+        expenses, balance = add_expense(expenses, today.strftime("%Y-%m-%d"), row["Category"], row["Description"], row["Amount"], balance)
+
+        if row["Frequency"] == "Daily":
+            next_due = next_due_date + pd.Timedelta(days=1)
+        elif row["Frequency"] == "Weekly":
+            next_due = next_due_date + pd.Timedelta(weeks=1)
+        elif row["Frequency"] == "Monthly":
+            next_due = next_due_date + pd.DateOffset(months=1)
+        elif row["Frequency"] == "Yearly":
+            next_due = next_due_date + pd.DateOffset(years=1)
+        
+        autopay.at[idx, "Next Due"] = next_due.strftime("%Y-%m-%d")
+    save_autopay(autopay)
+
+
+
+
