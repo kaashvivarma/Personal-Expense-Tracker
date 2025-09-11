@@ -449,8 +449,9 @@ elif st.session_state.page=="AutoPay":
 elif st.session_state.page=="Analytics and Report":
     st.header("Analytics and Reports")
     view=load_data()
-    if view.empty:
+    if view is None or view.shape[0] == 0:
         st.warning("No transactions available for analytics.")
+
     else:
         # --- Total Metrics ---
         total_income = view[view["Transaction"] == "Income"]["Amount"].sum()
@@ -535,7 +536,5 @@ for idx, row in autopay.iterrows():
         
         autopay.at[idx, "Next Due"] = next_due.strftime("%Y-%m-%d")
     save_autopay(autopay)
-
-
 
 
