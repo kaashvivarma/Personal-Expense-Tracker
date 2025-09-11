@@ -41,9 +41,9 @@ All data is stored in **CSV files**, ensuring simplicity and portability. While 
 
 ---
 ## 📊Data Handling
--Transactions, loans, debts, and auto-pay details are stored in CSV files.
--This keeps the project lightweight and beginner-friendly.
--⚠️ However, note that using CSVs may introduce limitations in speed and data consistency for very large-scale usage.
+- Transactions, loans, debts, and auto-pay details are stored in CSV files.
+- This keeps the project lightweight and beginner-friendly.
+- ⚠️ However, note that using CSVs may introduce limitations in speed and data consistency for very large-scale usage.
 
 ## 🛠️ Tech Stack
 - **Python**
@@ -66,4 +66,4 @@ All data is stored in **CSV files**, ensuring simplicity and portability. While 
 
 OR
 - **Use this link to access the app directly through Streamlit Cloud**:
-- https://budgetly.streamlit.app/
+    https://budgetly.streamlit.app/
