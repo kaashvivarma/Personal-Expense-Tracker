@@ -46,21 +46,24 @@ All data is stored in **CSV files**, ensuring simplicity and portability. While 
 -⚠️ However, note that using CSVs may introduce limitations in speed and data consistency for very large-scale usage.
 
 ## 🛠️ Tech Stack
--**Python**
--**Streamlit for UI**
--**Pandas & Matplotlib for data handling and visualization**
--**CSV for data storage**
+- **Python**
+- **Streamlit for UI**
+- **Pandas & Matplotlib for data handling and visualization**
+- **CSV for data storage**
 
 ## ⚙️ Installation
 
 1. Clone this repository:
+    ```bash
    git clone https://github.com/kaashvivarma/Personal-Expense-Tracker.git
    cd Personal-Expense-Tracker
-2.Install required dependencies:x
+2. Install required dependencies:
+    ```bash
     pip install -r requirements.txt
 3. Run the Streamlit app:
+    ```bash
     streamlit run tracker.py
 
-    OR
--**Use this link to access the app directly through Streamlit Cloud**
-https://budgetly.streamlit.app/
+OR
+- **Use this link to access the app directly through Streamlit Cloud**:
+- https://budgetly.streamlit.app/
